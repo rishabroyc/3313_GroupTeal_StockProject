@@ -1,6 +1,6 @@
-## ✅ Backend Progress Summary (as of April 2)
+## ✅ Backend Progress Summary
 
-We’ve implemented a fully functional C++ backend for the stock trading platform. It satisfies all SE3313A project requirements — including concurrency, persistent CSV-based storage, TCP socket communication, and multi-user interaction.
+Implemented a fully functional C++ backend for the stock trading platform. It satisfies all SE3313A project requirements — including concurrency, persistent CSV-based storage, TCP socket communication, and multi-user interaction.
 
 ### Features
 
