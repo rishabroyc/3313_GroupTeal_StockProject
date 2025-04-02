@@ -1,0 +1,46 @@
+# === GENERAL ===
+.DS_Store
+Thumbs.db
+*.log
+
+# === C++ BACKEND ===
+*.o
+*.obj
+*.out
+*.exe
+*.a
+*.so
+*.dll
+*.class
+*.swp
+*.dSYM/
+cmake-build-*/ 
+build/
+bin/
+debug/
+release/
+
+# CSV database files if generated dynamically (optional)
+# Uncomment if you want to ignore them
+# *.csv
+
+# === REACT + VITE FRONTEND ===
+# node.js dependencies
+node_modules/
+# Vite cache
+.vite/
+# build output
+dist/
+# environment variables
+.env
+.env.local
+.env.*.local
+
+# === IDE/EDITOR FILES ===
+.vscode/
+.idea/
+*.code-workspace
+
+# === OS FILES ===
+*.bak
+*~
