@@ -1,1 +1,2 @@
-# 3313_GroupTeal_StockProject
+
+## Project info
