@@ -1,7 +1,7 @@
 #include "server.h"
 
 int main() {
-    Server server(8080);
+    Server server(8081);
     server.start();
     return 0;
 }

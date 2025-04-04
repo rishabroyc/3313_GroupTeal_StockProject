@@ -34,14 +34,20 @@ const Dashboard = () => {
 
   useEffect(() => {
     // Check if user is logged in
-    const userJson = sessionStorage.getItem('user');
+    const username = localStorage.getItem('username');
     
-    if (!userJson) {
+    if (!username) {
       navigate('/login');
       return;
     }
     
-    setUser(JSON.parse(userJson));
+    // Create a mock user object since we only have the username
+    const mockUser = {
+      name: username,
+      balance: 100000 // Default balance
+    };
+    
+    setUser(mockUser);
     setLoading(false);
   }, [navigate]);
 

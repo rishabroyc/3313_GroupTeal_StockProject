@@ -5,9 +5,9 @@
 #include <mutex>
 #include <fstream>
 
-const std::string MARKET_FILE = "backend/db/market.csv";
-const std::string HOLDINGS_FILE = "backend/db/holdings.csv";
-const std::string TRANSACTIONS_FILE = "backend/db/transactions.csv";
+const std::string MARKET_FILE = "db/market.csv";
+const std::string HOLDINGS_FILE = "db/holdings.csv";
+const std::string TRANSACTIONS_FILE = "db/transactions.csv";
 
 std::mutex trade_mutex;
 

@@ -2,7 +2,7 @@
 #include "../utils/csv.h"
 #include <sstream>
 
-const std::string HOLDINGS_FILE = "backend/db/holdings.csv";
+const std::string HOLDINGS_FILE = "db/holdings.csv";
 
 std::string getPortfolio(const std::string& username) {
     std::ostringstream oss;

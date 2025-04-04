@@ -2,7 +2,7 @@
 #include "../utils/csv.h"
 #include <sstream>
 
-const std::string MARKET_FILE = "backend/db/market.csv";
+const std::string MARKET_FILE = "db/market.csv";
 
 std::string getMarketData() {
     std::ostringstream oss;

@@ -1,12 +1,38 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { EyeIcon, EyeOffIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { EyeIcon, EyeOffIcon } from 'lucide-react';
+
+const sendBackendCommand = async (command: string): Promise<string> => {
+  try {
+    console.log(`Sending command: ${command}`);
+    
+    // Using fetch API to directly communicate with the C++ backend
+    const response = await fetch('http://localhost:8081', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      body: command,
+    });
+    
+    const rawResponse = await response.text();
+    console.log(`Raw response: ${rawResponse}`);
+    
+    if (!response.ok) {
+      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+    }
+    
+    return rawResponse;
+  } catch (error) {
+    console.error('Error communicating with backend:', error);
+    throw error;
+  }
+};
 
 interface AuthFormProps {
   type: 'login' | 'register';
@@ -14,60 +40,79 @@ interface AuthFormProps {
 }
 
 const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess }) => {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    name: type === 'register' ? '' : undefined,
-  });
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUsername(e.target.value);
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+  };
+
+  const toggleShowPassword = () => {
+    setShowPassword(!showPassword);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!username.trim()) {
+      toast.error('Please enter a username');
+      return;
+    }
+
+    if (!password.trim()) {
+      toast.error('Please enter a password');
+      return;
+    }
+    
     setLoading(true);
 
     try {
-      // Simulate API request
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Normally you would authenticate with a real backend
-      if (type === 'login') {
-        // Mock login logic
-        const mockUser = {
-          id: '123',
-          email: formData.email,
-          name: 'John Doe',
-          balance: 100000,
-        };
+      // Send the appropriate command to the backend
+      const command = type === 'login' 
+        ? `LOGIN|${username}|${password}` 
+        : `REGISTER|${username}|${password}`;
+      
+      console.log(`Sending ${type} command: ${command}`);
+      const response = await sendBackendCommand(command);
+      console.log(`Received response: ${response}`);
+      
+      // Parse the response
+      if (response.startsWith('OK|')) {
+        // Store the username in localStorage
+        localStorage.setItem('username', username);
         
-        sessionStorage.setItem('user', JSON.stringify(mockUser));
-        toast.success('Successfully signed in');
+        toast.success(type === 'login' 
+          ? 'Successfully signed in' 
+          : 'Account created successfully'
+        );
+        console.log("About to navigate to dashboard");
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          navigate('/dashboard');
+          console.log("Navigation called");
+        }
+      } else if (response.startsWith('ERROR|')) {
+        // Extract the error message
+        const errorMessage = response.substring(6);
+        toast.error(errorMessage);
       } else {
-        // Mock registration logic
-        const mockUser = {
-          id: '123',
-          email: formData.email,
-          name: formData.name,
-          balance: 100000,
-        };
-        
-        sessionStorage.setItem('user', JSON.stringify(mockUser));
-        toast.success('Account created successfully');
-      }
-
-      if (onSuccess) {
-        onSuccess();
-      } else {
-        navigate('/dashboard');
+        toast.error('Unexpected response from server');
+        console.error('Unexpected response format:', response);
       }
     } catch (error) {
-      toast.error(type === 'login' ? 'Failed to sign in' : 'Failed to create account');
+      toast.error(type === 'login' 
+        ? 'Failed to sign in. Is the server running?' 
+        : 'Failed to create account. Is the server running?'
+      );
+      console.error('Auth error:', error);
     } finally {
       setLoading(false);
     }
@@ -75,30 +120,14 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess }) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 animate-slide-up">
-      {type === 'register' && (
-        <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
-          <Input
-            id="name"
-            name="name"
-            placeholder="John Doe"
-            value={formData.name}
-            onChange={handleChange}
-            required
-            className="h-12"
-          />
-        </div>
-      )}
-      
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="username">Username</Label>
         <Input
-          id="email"
-          name="email"
-          type="email"
-          placeholder="you@example.com"
-          value={formData.email}
-          onChange={handleChange}
+          id="username"
+          name="username"
+          placeholder={type === 'login' ? "Enter your username" : "Choose a username"}
+          value={username}
+          onChange={handleUsernameChange}
           required
           className="h-12"
         />
@@ -112,14 +141,14 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess }) => {
             name="password"
             type={showPassword ? "text" : "password"}
             placeholder="••••••••"
-            value={formData.password}
-            onChange={handleChange}
+            value={password}
+            onChange={handlePasswordChange}
             required
             className="h-12 pr-10"
           />
           <button
             type="button"
-            onClick={() => setShowPassword(!showPassword)}
+            onClick={toggleShowPassword}
             className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
           >
             {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
