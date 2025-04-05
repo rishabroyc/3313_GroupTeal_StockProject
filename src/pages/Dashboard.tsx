@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
@@ -6,8 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { ArrowDown, ArrowUp, DollarSign, TrendingUp, Wallet } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getMarketData, getPortfolio } from '@/services/socketService';
 
-// Mock data
+// Helper function to generate chart data
 const generateStockData = (days = 30, volatility = 0.02) => {
   const data = [];
   let price = 150 + Math.random() * 50;
@@ -24,13 +24,19 @@ const generateStockData = (days = 30, volatility = 0.02) => {
   return data;
 };
 
-const stockData = generateStockData();
-const portfolioData = generateStockData(30, 0.01);
-
 const Dashboard = () => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  
+  // State for market and portfolio data
+  const [marketData, setMarketData] = useState<Array<{ ticker: string, name: string, price: number }>>([]);
+  const [portfolioData, setPortfolioData] = useState<Array<{ ticker: string, quantity: number }>>([]);
+  const [isLoadingMarketData, setIsLoadingMarketData] = useState(true);
+  const [isLoadingPortfolio, setIsLoadingPortfolio] = useState(true);
+  
+  // Generate chart data
+  const chartData = generateStockData(30, 0.01);
 
   useEffect(() => {
     // Check if user is logged in
@@ -48,8 +54,63 @@ const Dashboard = () => {
     };
     
     setUser(mockUser);
+    
+    // Fetch market data
+    const fetchMarketData = async () => {
+      try {
+        setIsLoadingMarketData(true);
+        const result = await getMarketData();
+        if (result.success && result.stocks) {
+          setMarketData(result.stocks);
+        } else {
+          console.error('Failed to fetch market data:', result.message);
+        }
+      } catch (error) {
+        console.error('Error fetching market data:', error);
+      } finally {
+        setIsLoadingMarketData(false);
+      }
+    };
+    
+    // Fetch portfolio data
+    const fetchPortfolioData = async () => {
+      try {
+        setIsLoadingPortfolio(true);
+        const result = await getPortfolio(username);
+        if (result.success && result.holdings) {
+          setPortfolioData(result.holdings);
+        } else {
+          console.error('Failed to fetch portfolio:', result.message);
+        }
+      } catch (error) {
+        console.error('Error fetching portfolio:', error);
+      } finally {
+        setIsLoadingPortfolio(false);
+      }
+    };
+    
+    // Call both fetch functions
+    fetchMarketData();
+    fetchPortfolioData();
+    
+    // Complete loading
     setLoading(false);
   }, [navigate]);
+  
+  // Calculate total portfolio value
+  const calculatePortfolioValue = () => {
+    if (portfolioData.length === 0 || marketData.length === 0) return 0;
+    
+    return portfolioData.reduce((total, holding) => {
+      const stock = marketData.find(s => s.ticker === holding.ticker);
+      if (stock) {
+        return total + (stock.price * holding.quantity);
+      }
+      return total;
+    }, 0);
+  };
+  
+  const totalPortfolioValue = calculatePortfolioValue();
 
   if (loading) {
     return (
@@ -60,19 +121,6 @@ const Dashboard = () => {
       </Layout>
     );
   }
-
-  // Mock portfolio data
-  const portfolio = {
-    totalValue: 124763.29,
-    change: 2.34,
-    changeAmount: 2837.41,
-    stocks: [
-      { symbol: 'AAPL', name: 'Apple Inc.', shares: 15, price: 178.42, change: 1.2 },
-      { symbol: 'MSFT', name: 'Microsoft', shares: 10, price: 334.78, change: -0.5 },
-      { symbol: 'GOOGL', name: 'Alphabet', shares: 5, price: 139.60, change: 0.8 },
-      { symbol: 'AMZN', name: 'Amazon', shares: 8, price: 178.15, change: 2.1 },
-    ]
-  };
 
   return (
     <Layout>
@@ -97,7 +145,7 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent className="h-[320px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={portfolioData}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
@@ -145,38 +193,42 @@ const Dashboard = () => {
             <CardContent className="space-y-4">
               <div className="space-y-1">
                 <p className="text-muted-foreground text-sm">Total Value</p>
-                <p className="text-2xl font-bold">${portfolio.totalValue.toLocaleString()}</p>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <div className={`p-1 rounded-full ${portfolio.change >= 0 ? 'bg-success/20' : 'bg-destructive/20'}`}>
-                  {portfolio.change >= 0 ? 
-                    <ArrowUp className="h-4 w-4 text-success" /> : 
-                    <ArrowDown className="h-4 w-4 text-destructive" />
-                  }
-                </div>
-                <span className={`text-sm font-medium ${portfolio.change >= 0 ? 'text-success' : 'text-destructive'}`}>
-                  {portfolio.change >= 0 ? '+' : ''}{portfolio.change}% (${portfolio.changeAmount.toLocaleString()})
-                </span>
+                <p className="text-2xl font-bold">${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
               
               <div className="pt-4 border-t">
-                <p className="text-muted-foreground text-sm mb-2">Top Holdings</p>
+                <p className="text-muted-foreground text-sm mb-2">Your Holdings</p>
                 <div className="space-y-3">
-                  {portfolio.stocks.slice(0, 3).map((stock) => (
-                    <div key={stock.symbol} className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{stock.symbol}</p>
-                        <p className="text-xs text-muted-foreground">{stock.shares} shares</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium">${stock.price}</p>
-                        <p className={`text-xs ${stock.change >= 0 ? 'text-success' : 'text-destructive'}`}>
-                          {stock.change >= 0 ? '+' : ''}{stock.change}%
-                        </p>
-                      </div>
+                  {isLoadingPortfolio ? (
+                    <div className="flex justify-center py-2">
+                      <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
                     </div>
-                  ))}
+                  ) : portfolioData.length > 0 ? (
+                    portfolioData.map((holding) => {
+                      // Find stock price from market data
+                      const stockInfo = marketData.find(stock => stock.ticker === holding.ticker);
+                      const price = stockInfo?.price || 0;
+                      
+                      return (
+                        <div key={holding.ticker} className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{holding.ticker}</p>
+                            <p className="text-xs text-muted-foreground">{holding.quantity} shares</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-medium">${price.toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              ${(price * holding.quantity).toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-2">
+                      You don't own any stocks yet
+                    </p>
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -234,19 +286,14 @@ const Dashboard = () => {
           </Card>
           
           <Card className="animate-slide-up md:col-span-2 overflow-hidden h-80">
-            <Tabs defaultValue="trending">
+            <Tabs defaultValue="stocks">
               <CardHeader className="pb-0">
                 <div className="flex items-center justify-between">
-                  <CardTitle>Stocks</CardTitle>
-                  <TabsList>
-                    <TabsTrigger value="trending">Trending</TabsTrigger>
-                    <TabsTrigger value="gainers">Gainers</TabsTrigger>
-                    <TabsTrigger value="losers">Losers</TabsTrigger>
-                  </TabsList>
+                  <CardTitle>Live Market Data</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                <TabsContent value="trending" className="m-0">
+                <TabsContent value="stocks" className="m-0">
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead>
@@ -254,132 +301,32 @@ const Dashboard = () => {
                           <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Symbol</th>
                           <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Name</th>
                           <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Price</th>
-                          <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Change</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">AAPL</td>
-                          <td className="px-6 py-4 text-sm">Apple Inc.</td>
-                          <td className="px-6 py-4 text-sm text-right">$178.42</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+1.2%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">TSLA</td>
-                          <td className="px-6 py-4 text-sm">Tesla, Inc.</td>
-                          <td className="px-6 py-4 text-sm text-right">$245.36</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+3.4%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">MSFT</td>
-                          <td className="px-6 py-4 text-sm">Microsoft Corp.</td>
-                          <td className="px-6 py-4 text-sm text-right">$334.78</td>
-                          <td className="px-6 py-4 text-sm text-right text-destructive">-0.5%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">AMZN</td>
-                          <td className="px-6 py-4 text-sm">Amazon.com Inc.</td>
-                          <td className="px-6 py-4 text-sm text-right">$178.15</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+2.1%</td>
-                        </tr>
-                        <tr className="hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">NVDA</td>
-                          <td className="px-6 py-4 text-sm">NVIDIA Corp.</td>
-                          <td className="px-6 py-4 text-sm text-right">$824.19</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+4.3%</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </TabsContent>
-                <TabsContent value="gainers" className="m-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-muted/50">
-                          <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Symbol</th>
-                          <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Name</th>
-                          <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Price</th>
-                          <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Change</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">NVDA</td>
-                          <td className="px-6 py-4 text-sm">NVIDIA Corp.</td>
-                          <td className="px-6 py-4 text-sm text-right">$824.19</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+4.3%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">AMD</td>
-                          <td className="px-6 py-4 text-sm">Advanced Micro Devices</td>
-                          <td className="px-6 py-4 text-sm text-right">$156.84</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+3.8%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">TSLA</td>
-                          <td className="px-6 py-4 text-sm">Tesla, Inc.</td>
-                          <td className="px-6 py-4 text-sm text-right">$245.36</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+3.4%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">AMZN</td>
-                          <td className="px-6 py-4 text-sm">Amazon.com Inc.</td>
-                          <td className="px-6 py-4 text-sm text-right">$178.15</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+2.1%</td>
-                        </tr>
-                        <tr className="hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">META</td>
-                          <td className="px-6 py-4 text-sm">Meta Platforms Inc.</td>
-                          <td className="px-6 py-4 text-sm text-right">$474.36</td>
-                          <td className="px-6 py-4 text-sm text-right text-success">+1.9%</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </TabsContent>
-                <TabsContent value="losers" className="m-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-muted/50">
-                          <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Symbol</th>
-                          <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Name</th>
-                          <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Price</th>
-                          <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Change</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">INTC</td>
-                          <td className="px-6 py-4 text-sm">Intel Corp.</td>
-                          <td className="px-6 py-4 text-sm text-right">$31.75</td>
-                          <td className="px-6 py-4 text-sm text-right text-destructive">-5.2%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">DIS</td>
-                          <td className="px-6 py-4 text-sm">Walt Disney Co.</td>
-                          <td className="px-6 py-4 text-sm text-right">$103.56</td>
-                          <td className="px-6 py-4 text-sm text-right text-destructive">-2.8%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">PFE</td>
-                          <td className="px-6 py-4 text-sm">Pfizer Inc.</td>
-                          <td className="px-6 py-4 text-sm text-right">$28.47</td>
-                          <td className="px-6 py-4 text-sm text-right text-destructive">-1.7%</td>
-                        </tr>
-                        <tr className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">WMT</td>
-                          <td className="px-6 py-4 text-sm">Walmart Inc.</td>
-                          <td className="px-6 py-4 text-sm text-right">$57.89</td>
-                          <td className="px-6 py-4 text-sm text-right text-destructive">-1.2%</td>
-                        </tr>
-                        <tr className="hover:bg-muted/20 transition-colors">
-                          <td className="px-6 py-4 text-sm font-medium">MSFT</td>
-                          <td className="px-6 py-4 text-sm">Microsoft Corp.</td>
-                          <td className="px-6 py-4 text-sm text-right">$334.78</td>
-                          <td className="px-6 py-4 text-sm text-right text-destructive">-0.5%</td>
-                        </tr>
+                        {isLoadingMarketData ? (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-4 text-center">
+                              <div className="flex justify-center">
+                                <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : marketData.length > 0 ? (
+                          marketData.map((stock) => (
+                            <tr key={stock.ticker} className="border-b hover:bg-muted/20 transition-colors">
+                              <td className="px-6 py-4 text-sm font-medium">{stock.ticker}</td>
+                              <td className="px-6 py-4 text-sm">{stock.name}</td>
+                              <td className="px-6 py-4 text-sm text-right">${stock.price.toFixed(2)}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={3} className="px-6 py-4 text-center text-muted-foreground">
+                              No market data available
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
