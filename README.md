@@ -37,10 +37,21 @@ g++ -std=c++17 -pthread main.cpp server.cpp handlers/*.cpp utils/*.cpp -o server
 ```bash
 ./server
 
-### What's Next
-- Connect frontend to backend with socket-based trading
+## Market Data Updates:
+The application uses real-time stock data that is stored in `db/market.csv`. To update this data:
 
-- Auto-update market.csv using a live stock API
+1. Make sure you have Python and the required packages installed:
+   ```bash
+   pip install requests
+2. Run the market updater script:
+
+cd backend
+python market_updater.py
+
+### What's Next
+- Connect frontend to backend with socket-based trading -- DONE
+
+- Auto-update market.csv using a live stock API -- DONE
 
 - Track and validate user balances
 
