@@ -54,6 +54,62 @@ struct Transaction {
 
 // Vector to store all transactions
 static std::vector<Transaction> transactions;
+
+//getting last 3 sells
+std::string getRecentSellsFromCSV(const std::string& username, const std::string& path = "db/transactions.csv") {
+    std::ifstream file(path);
+    std::string line;
+    std::vector<std::string> matchingLines;
+
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string user, type, ticker, quantityStr, priceStr;
+
+        std::getline(ss, user, ',');
+        std::getline(ss, type, ',');
+        std::getline(ss, ticker, ',');
+        std::getline(ss, quantityStr, ',');
+        std::getline(ss, priceStr, ',');
+
+        if (user == username && type == "SELL") {
+            matchingLines.push_back(line);
+        }
+    }
+
+    // Only keep the last 3
+    int start = std::max(0, (int)matchingLines.size() - 3);
+    std::stringstream result;
+    result << "[";
+
+    bool first = true;
+    for (int i = start; i < matchingLines.size(); ++i) {
+        std::stringstream ss(matchingLines[i]);
+        std::string user, type, ticker, quantityStr, priceStr;
+        std::getline(ss, user, ',');
+        std::getline(ss, type, ',');
+        std::getline(ss, ticker, ',');
+        std::getline(ss, quantityStr, ',');
+        std::getline(ss, priceStr, ',');
+
+        if (!first) result << ",";
+        first = false;
+
+        result << "{"
+               << "\"username\":\"" << user << "\","
+               << "\"type\":\"" << type << "\","
+               << "\"ticker\":\"" << ticker << "\","
+               << "\"quantity\":" << quantityStr << ","
+               << "\"price\":" << priceStr << ","
+               << "\"total\":" << std::stod(quantityStr) * std::stod(priceStr)
+               << "}";
+    }
+
+    result << "]";
+    return result.str();
+}
+
+
+//getting last 3 buys
 std::string getLast3BuysFromCSV(const std::string& username, const std::string& path = "db/transactions.csv") {
     std::ifstream file(path);
     std::string line;
@@ -185,7 +241,7 @@ void Server::start() {
 
     std::cout << "Server listening on port " << port << std::endl;
 
-    // ✅ Load saved transactions from file
+    //Load saved transactions from file
     //loadTransactionsFromCSV("db/transactions.csv");
 
     while (true) {
@@ -324,6 +380,10 @@ void Server::handleClient(int clientSocket) {
         std::string username = command.substr(9);
         result = getLast3BuysFromCSV(username);
         success = true;    
+    } else if (command.rfind("RECENT_SELLS|", 0) == 0) {
+        std::string username = command.substr(13);
+        result = getRecentSellsFromCSV(username);
+        success = true;
     } else {
         result = "ERROR|Unknown command";
         success = false;

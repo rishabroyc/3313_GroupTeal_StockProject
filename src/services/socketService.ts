@@ -259,4 +259,21 @@ export async function getRecentTransactions(username) {
     console.error("Error fetching recent transactions:", error);
     return { success: false, message: error.message };
   }
-}
+};
+
+export const getRecentSells = async (username: string) => {
+  const response = await fetch('http://localhost:8081/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: `RECENT_SELLS|${username}`
+  });
+
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    return { success: true, data };
+  } catch {
+    return { success: false, message: 'Invalid JSON returned' };
+  }
+};
+
