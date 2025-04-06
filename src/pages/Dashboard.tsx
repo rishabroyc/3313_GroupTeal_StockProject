@@ -4,9 +4,9 @@ import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Wallet } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getMarketData, getPortfolio, buyStock } from '@/services/socketService';
+import { getMarketData, getPortfolio, buyStock, sellStock } from '@/services/socketService';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
@@ -23,10 +23,12 @@ const Dashboard = () => {
   const [isLoadingMarketData, setIsLoadingMarketData] = useState(true);
   const [isLoadingPortfolio, setIsLoadingPortfolio] = useState(true);
   
-  // State for buy dialog
+  // State for buy/sell dialogs
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
+  const [sellDialogOpen, setSellDialogOpen] = useState(false);
   const [selectedStock, setSelectedStock] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [dialogAction, setDialogAction] = useState('buy'); // 'buy' or 'sell'
 
   useEffect(() => {
     // Check if user is logged in
@@ -128,36 +130,69 @@ const Dashboard = () => {
 
   // Handle buy button click
   const handleBuyClick = (stock) => {
+    console.log("Buy button clicked for:", stock);
     setSelectedStock(stock);
-    setBuyDialogOpen(true);
+    setDialogAction('buy');
+    setQuantity(1);
+    // Force update with a slight delay to ensure state is properly updated
+    setTimeout(() => {
+      setBuyDialogOpen(true);
+    }, 10);
   };
 
-  // Handle buy confirmation
-  const handleBuyConfirm = async () => {
+  // Handle sell button click
+  const handleSellClick = (stock) => {
+    console.log("Sell button clicked for:", stock);
+    setSelectedStock(stock);
+    setDialogAction('sell');
+    
+    // Find how many shares the user owns of this stock
+    const holding = portfolioData.find(h => h.ticker === stock.ticker);
+    const maxShares = holding ? holding.quantity : 0;
+    
+    // Set initial quantity to 1 or max available if less than 1
+    setQuantity(maxShares > 0 ? 1 : 0);
+    
+    // Force update with a slight delay to ensure state is properly updated
+    setTimeout(() => {
+      setBuyDialogOpen(true);
+    }, 10);
+  };
+
+  // Handle transaction confirmation (both buy and sell)
+  const handleTransactionConfirm = async () => {
     try {
       const username = localStorage.getItem('username');
       if (!username || !selectedStock) return;
 
-      const result = await buyStock(username, selectedStock.ticker, quantity);
+      let result;
+      
+      if (dialogAction === 'buy') {
+        result = await buyStock(username, selectedStock.ticker, quantity);
+      } else {
+        result = await sellStock(username, selectedStock.ticker, quantity);
+      }
       
       if (result.success) {
         toast({
-          title: "Purchase successful",
-          description: `You bought ${quantity} shares of ${selectedStock.ticker}`,
+          title: dialogAction === 'buy' ? "Purchase successful" : "Sale successful",
+          description: dialogAction === 'buy' 
+            ? `You bought ${quantity} shares of ${selectedStock.ticker}` 
+            : `You sold ${quantity} shares of ${selectedStock.ticker}`,
         });
         
-        // Refresh data after successful purchase
+        // Refresh data after successful transaction
         refreshData();
       } else {
         toast({
-          title: "Purchase failed",
-          description: result.message || "An error occurred during purchase",
+          title: dialogAction === 'buy' ? "Purchase failed" : "Sale failed",
+          description: result.message || `An error occurred during ${dialogAction === 'buy' ? 'purchase' : 'sale'}`,
           variant: "destructive"
         });
       }
     } catch (error) {
       toast({
-        title: "Purchase failed",
+        title: dialogAction === 'buy' ? "Purchase failed" : "Sale failed",
         description: "Could not complete the transaction",
         variant: "destructive"
       });
@@ -283,14 +318,24 @@ const Dashboard = () => {
                             <td className="px-6 py-4 text-sm">{stock.name}</td>
                             <td className="px-6 py-4 text-sm text-right">${stock.price.toFixed(2)}</td>
                             <td className="px-6 py-4 text-sm text-right">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => handleBuyClick(stock)}
-                                className="text-xs"
-                              >
-                                Buy
-                              </Button>
+                              <div className="flex space-x-2 justify-end">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => handleBuyClick(stock)}
+                                  className="text-xs"
+                                >
+                                  Buy
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => handleSellClick(stock)}
+                                  className="text-xs"
+                                >
+                                  Sell
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -340,48 +385,91 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Buy Stock Dialog */}
-      <Dialog open={buyDialogOpen} onOpenChange={setBuyDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Buy Stock</DialogTitle>
-            <DialogDescription>
-              {selectedStock && `Purchase shares of ${selectedStock.name} (${selectedStock.ticker}) at $${selectedStock.price.toFixed(2)} per share.`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="quantity" className="text-right">
-                Quantity
-              </Label>
-              <Input
-                id="quantity"
-                type="number"
-                value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                min="1"
-                className="col-span-3"
-              />
-            </div>
-            {selectedStock && (
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Total</Label>
-                <div className="col-span-3 font-medium">
-                  ${(quantity * selectedStock.price).toFixed(2)}
+      {/* Stock Transaction Modal - Using a fixed position div for simplicity */}
+      {buyDialogOpen && selectedStock && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setBuyDialogOpen(false)}>
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg max-w-md w-full shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold">{dialogAction === 'buy' ? 'Buy' : 'Sell'} Stock</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {dialogAction === 'buy' 
+                    ? `Purchase shares of ${selectedStock.name} (${selectedStock.ticker}) at ${selectedStock.price.toFixed(2)} per share.`
+                    : `Sell shares of ${selectedStock.name} (${selectedStock.ticker}) at ${selectedStock.price.toFixed(2)} per share.`
+                  }
+                </p>
+              </div>
+              
+              <div className="grid gap-4 py-4">
+                {dialogAction === 'sell' && (
+                  <div className="text-sm mb-2">
+                    {(() => {
+                      const holding = portfolioData.find(h => h.ticker === selectedStock.ticker);
+                      const sharesOwned = holding ? holding.quantity : 0;
+                      return (
+                        <p className={sharesOwned === 0 ? "text-red-500" : ""}>
+                          You currently own {sharesOwned} shares of {selectedStock.ticker}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <label htmlFor="quantity" className="text-right text-sm">
+                    Quantity
+                  </label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    value={quantity}
+                    onChange={(e) => {
+                      const newValue = parseInt(e.target.value) || 0;
+                      
+                      // For sell, limit to shares owned
+                      if (dialogAction === 'sell') {
+                        const holding = portfolioData.find(h => h.ticker === selectedStock.ticker);
+                        const maxShares = holding ? holding.quantity : 0;
+                        setQuantity(Math.min(newValue, maxShares));
+                      } else {
+                        setQuantity(newValue > 0 ? newValue : 1);
+                      }
+                    }}
+                    min={dialogAction === 'buy' ? "1" : "0"}
+                    max={dialogAction === 'sell' ? (() => {
+                      const holding = portfolioData.find(h => h.ticker === selectedStock.ticker);
+                      return holding ? holding.quantity : 0;
+                    })() : undefined}
+                    className="col-span-3"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <span className="text-right text-sm">Total</span>
+                  <div className="col-span-3 font-medium">
+                    ${(quantity * selectedStock.price).toFixed(2)}
+                  </div>
                 </div>
               </div>
-            )}
+              
+              <div className="flex justify-end space-x-2">
+                <Button variant="ghost" onClick={() => setBuyDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleTransactionConfirm}
+                  disabled={dialogAction === 'sell' && (() => {
+                    const holding = portfolioData.find(h => h.ticker === selectedStock.ticker);
+                    return !holding || holding.quantity === 0 || quantity === 0;
+                  })()}
+                >
+                  {dialogAction === 'buy' ? 'Confirm Purchase' : 'Confirm Sale'}
+                </Button>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setBuyDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleBuyConfirm}>
-              Confirm Purchase
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </Layout>
   );
 };
