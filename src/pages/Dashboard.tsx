@@ -4,7 +4,7 @@ import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Wallet } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getMarketData, getPortfolio, buyStock, sellStock } from '@/services/socketService';
+import { getMarketData, getPortfolio, buyStock, sellStock, getRecentTransactions, getRecentSells  } from '@/services/socketService';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,10 @@ const Dashboard = () => {
   const [selectedStock, setSelectedStock] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [dialogAction, setDialogAction] = useState('buy'); // 'buy' or 'sell'
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [recentSells, setRecentSells] = useState([]);
+
+
 
   useEffect(() => {
     // Check if user is logged in
@@ -46,6 +50,20 @@ const Dashboard = () => {
     
     setUser(userObj);
     
+    const fetchRecentTransactions = async () => {
+      const result = await getRecentTransactions(username);
+      if (result.success && result.data) {
+        setRecentTransactions(result.data);
+      }
+    };
+    
+    const fetchRecentSells = async () => {
+      const result = await getRecentSells(username);
+      if (result.success && result.data) {
+        setRecentSells(result.data);
+      }
+    };
+
     // Fetch market data
     const fetchMarketData = async () => {
       try {
@@ -83,6 +101,9 @@ const Dashboard = () => {
     // Call both fetch functions
     fetchMarketData();
     fetchPortfolioData();
+    fetchRecentTransactions();
+    fetchRecentSells();
+
     
     // Complete loading
     setLoading(false);
@@ -375,12 +396,45 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
+                {recentTransactions.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
                       No transaction history available
                     </td>
                   </tr>
+                ) : (
+                  recentTransactions.map((txn, idx) => (
+                    <tr key={idx} className="border-b hover:bg-muted/20 transition-colors">
+                      <td className="px-6 py-4 text-sm">{txn.date || 'N/A'}</td>
+                      <td className="px-6 py-4 text-sm">{txn.ticker}</td>
+                      <td className="px-6 py-4 text-sm">{txn.type}</td>
+                      <td className="px-6 py-4 text-sm text-right">{txn.quantity}</td>
+                      <td className="px-6 py-4 text-sm text-right">${txn.price.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm text-right">${(txn.price * txn.quantity).toFixed(2)}</td>
+                    </tr>
+                  ))
+                )}
                 </tbody>
+                <tbody>
+                  {recentSells.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                        No recent sell transactions
+                      </td>
+                    </tr>
+                  ) : (
+                    recentSells.map((txn, idx) => (
+                      <tr key={idx} className="border-b hover:bg-muted/20 transition-colors">
+                      <td className="px-6 py-4 text-sm">{txn.date || 'N/A'}</td>
+                      <td className="px-6 py-4 text-sm">{txn.ticker}</td>
+                      <td className="px-6 py-4 text-sm">{txn.type}</td>
+                      <td className="px-6 py-4 text-sm text-right">{txn.quantity}</td>
+                      <td className="px-6 py-4 text-sm text-right">${txn.price.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm text-right">${(txn.price * txn.quantity).toFixed(2)}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
               </table>
             </div>
           </CardContent>
