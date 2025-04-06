@@ -251,27 +251,29 @@ const Dashboard = () => {
                     <div className="flex justify-center py-2">
                       <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
                     </div>
-                  ) : portfolioData.length > 0 ? (
-                    portfolioData.map((holding) => {
-                      // Find stock price from market data
-                      const stockInfo = marketData.find(stock => stock.ticker === holding.ticker);
-                      const price = stockInfo?.price || 0;
-                      
-                      return (
-                        <div key={holding.ticker} className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{holding.ticker}</p>
-                            <p className="text-xs text-muted-foreground">{holding.quantity} shares</p>
+                  ) : portfolioData.filter(holding => holding.quantity > 0).length > 0 ? (
+                    portfolioData
+                      .filter(holding => holding.quantity > 0) // Only show holdings with shares > 0
+                      .map((holding) => {
+                        // Find stock price from market data
+                        const stockInfo = marketData.find(stock => stock.ticker === holding.ticker);
+                        const price = stockInfo?.price || 0;
+                        
+                        return (
+                          <div key={holding.ticker} className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">{holding.ticker}</p>
+                              <p className="text-xs text-muted-foreground">{holding.quantity} shares</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-medium">${price.toFixed(2)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                ${(price * holding.quantity).toFixed(2)}
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-medium">${price.toFixed(2)}</p>
-                            <p className="text-xs text-muted-foreground">
-                              ${(price * holding.quantity).toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })
+                        );
+                      })
                   ) : (
                     <p className="text-sm text-muted-foreground text-center py-2">
                       You don't own any stocks yet
