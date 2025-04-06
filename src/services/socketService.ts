@@ -241,3 +241,22 @@ export const sellStock = async (username: string, ticker: string, quantity: numb
     };
   }
 };
+
+export async function getRecentTransactions(username) {
+  try {
+    const response = await fetch("http://localhost:8081/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/plain",
+      },
+      body: `CSV_BUYS|${username}`,
+    });
+
+    const text = await response.text();
+    const parsed = JSON.parse(text);
+    return { success: true, data: parsed };
+  } catch (error) {
+    console.error("Error fetching recent transactions:", error);
+    return { success: false, message: error.message };
+  }
+}

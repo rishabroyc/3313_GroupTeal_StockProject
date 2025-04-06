@@ -33,8 +33,81 @@
 #include "handlers/market.h"
 #include "handlers/trade.h"
 #include "handlers/portfolio.h"
+#include <vector>
+#include <ctime>
+#include <iomanip>
+#include <chrono>
+#include <fstream>
+#undef max
 
-Server::Server(int port) : port(port) {}
+
+
+// Define Transaction structure
+struct Transaction {
+    std::string username;
+    std::string ticker;
+    std::string type;  // "BUY" or "SELL"
+    int quantity;
+    double price;
+    std::string date;
+};
+
+// Vector to store all transactions
+static std::vector<Transaction> transactions;
+std::string getLast3BuysFromCSV(const std::string& username, const std::string& path = "db/transactions.csv") {
+    std::ifstream file(path);
+    std::string line;
+    std::vector<std::string> matchingLines;
+
+    while (std::getline(file, line)) {
+        std::stringstream ss(line);
+        std::string user, type, ticker, quantityStr, priceStr;
+
+        std::getline(ss, user, ',');
+        std::getline(ss, type, ',');
+        std::getline(ss, ticker, ',');
+        std::getline(ss, quantityStr, ',');
+        std::getline(ss, priceStr, ',');
+
+        if (user == username && type == "BUY") {
+            matchingLines.push_back(line);
+        }
+    }
+
+    // Only keep the last 3
+    int start = std::max(0, (int)matchingLines.size() - 3);
+    std::stringstream result;
+    result << "[";
+
+    bool first = true;
+    for (int i = start; i < matchingLines.size(); ++i) {
+        std::stringstream ss(matchingLines[i]);
+        std::string user, type, ticker, quantityStr, priceStr;
+        std::getline(ss, user, ',');
+        std::getline(ss, type, ',');
+        std::getline(ss, ticker, ',');
+        std::getline(ss, quantityStr, ',');
+        std::getline(ss, priceStr, ',');
+
+        if (!first) result << ",";
+        first = false;
+
+        result << "{"
+               << "\"username\":\"" << user << "\","
+               << "\"type\":\"" << type << "\","
+               << "\"ticker\":\"" << ticker << "\","
+               << "\"quantity\":" << quantityStr << ","
+               << "\"price\":" << priceStr << ","
+               << "\"total\":" << std::stod(quantityStr) * std::stod(priceStr)
+               << "}";
+    }
+
+    result << "]";
+    return result.str();
+}
+
+
+Server::Server(int port) : port(port) {}  // ✅ this defines the constructor
 
 void Server::start() {
 #ifdef _WIN32
@@ -49,9 +122,9 @@ void Server::start() {
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
-        std::cerr << "Socket creation failed with error: " << 
+        std::cerr << "Socket creation failed with error: " <<
 #ifdef _WIN32
-            WSAGetLastError() 
+            WSAGetLastError()
 #else
             errno
 #endif
@@ -80,9 +153,9 @@ void Server::start() {
     address.sin_port = htons(port);
 
     if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
-        std::cerr << "Bind failed with error: " << 
+        std::cerr << "Bind failed with error: " <<
 #ifdef _WIN32
-            WSAGetLastError() 
+            WSAGetLastError()
 #else
             errno
 #endif
@@ -96,9 +169,9 @@ void Server::start() {
     std::cout << "Bind successful" << std::endl;
 
     if (listen(server_fd, 5) < 0) {
-        std::cerr << "Listen failed with error: " << 
+        std::cerr << "Listen failed with error: " <<
 #ifdef _WIN32
-            WSAGetLastError() 
+            WSAGetLastError()
 #else
             errno
 #endif
@@ -112,13 +185,16 @@ void Server::start() {
 
     std::cout << "Server listening on port " << port << std::endl;
 
+    // ✅ Load saved transactions from file
+    //loadTransactionsFromCSV("db/transactions.csv");
+
     while (true) {
         std::cout << "Waiting for connection..." << std::endl;
         int client_socket = accept(server_fd, nullptr, nullptr);
         if (client_socket < 0) {
-            std::cerr << "Accept failed with error: " << 
+            std::cerr << "Accept failed with error: " <<
 #ifdef _WIN32
-                WSAGetLastError() 
+                WSAGetLastError()
 #else
                 errno
 #endif
@@ -135,6 +211,7 @@ void Server::start() {
     WSACleanup();
 #endif
 }
+
 
 // Parse an HTTP request to extract the command
 std::string Server::parseHttpRequest(const std::string& request) {
@@ -226,7 +303,7 @@ void Server::handleClient(int clientSocket) {
         int qty = std::stoi(parts.substr(pos2+1));
         result = buyStock(user, ticker, qty) ? "OK|Trade completed" : "ERROR|Buy failed";
         success = result.substr(0, 2) == "OK";
-    } else if (command.rfind("SELL|", 0) == 0) {
+        } else if (command.rfind("SELL|", 0) == 0) {
         auto parts = command.substr(5);
         auto pos1 = parts.find("|");
         auto pos2 = parts.rfind("|");
@@ -243,6 +320,10 @@ void Server::handleClient(int clientSocket) {
         // Handle preflight CORS requests
         result = "";
         success = true;
+    } else if (command.rfind("CSV_BUYS|", 0) == 0) {
+        std::string username = command.substr(9);
+        result = getLast3BuysFromCSV(username);
+        success = true;    
     } else {
         result = "ERROR|Unknown command";
         success = false;
