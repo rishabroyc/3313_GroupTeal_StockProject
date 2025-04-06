@@ -2,41 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { ArrowDown, ArrowUp, DollarSign, TrendingUp, Wallet } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getMarketData, getPortfolio } from '@/services/socketService';
-
-// Helper function to generate chart data
-const generateStockData = (days = 30, volatility = 0.02) => {
-  const data = [];
-  let price = 150 + Math.random() * 50;
-
-  for (let i = 0; i < days; i++) {
-    const change = price * volatility * (Math.random() - 0.5);
-    price += change;
-    data.push({
-      date: new Date(Date.now() - (days - i) * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      price: Number(Math.max(0, Number(price.toFixed(2))))
-    });
-  }
-
-  return data;
-};
+import { getMarketData, getPortfolio, buyStock } from '@/services/socketService';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
 
 const Dashboard = () => {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { toast } = useToast();
   
   // State for market and portfolio data
-  const [marketData, setMarketData] = useState<Array<{ ticker: string, name: string, price: number }>>([]);
-  const [portfolioData, setPortfolioData] = useState<Array<{ ticker: string, quantity: number }>>([]);
+  const [marketData, setMarketData] = useState([]);
+  const [portfolioData, setPortfolioData] = useState([]);
   const [isLoadingMarketData, setIsLoadingMarketData] = useState(true);
   const [isLoadingPortfolio, setIsLoadingPortfolio] = useState(true);
   
-  // Generate chart data
-  const chartData = generateStockData(30, 0.01);
+  // State for buy dialog
+  const [buyDialogOpen, setBuyDialogOpen] = useState(false);
+  const [selectedStock, setSelectedStock] = useState(null);
+  const [quantity, setQuantity] = useState(1);
 
   useEffect(() => {
     // Check if user is logged in
@@ -47,13 +37,12 @@ const Dashboard = () => {
       return;
     }
     
-    // Create a mock user object since we only have the username
-    const mockUser = {
-      name: username,
-      balance: 100000 // Default balance
+    // Create a user object with just the username
+    const userObj = {
+      name: username
     };
     
-    setUser(mockUser);
+    setUser(userObj);
     
     // Fetch market data
     const fetchMarketData = async () => {
@@ -97,6 +86,31 @@ const Dashboard = () => {
     setLoading(false);
   }, [navigate]);
   
+  // Function to refresh data after a purchase
+  const refreshData = () => {
+    const username = localStorage.getItem('username');
+    if (username) {
+      setIsLoadingMarketData(true);
+      setIsLoadingPortfolio(true);
+      
+      getMarketData()
+        .then(result => {
+          if (result.success && result.stocks) {
+            setMarketData(result.stocks);
+          }
+        })
+        .finally(() => setIsLoadingMarketData(false));
+      
+      getPortfolio(username)
+        .then(result => {
+          if (result.success && result.holdings) {
+            setPortfolioData(result.holdings);
+          }
+        })
+        .finally(() => setIsLoadingPortfolio(false));
+    }
+  };
+  
   // Calculate total portfolio value
   const calculatePortfolioValue = () => {
     if (portfolioData.length === 0 || marketData.length === 0) return 0;
@@ -111,6 +125,48 @@ const Dashboard = () => {
   };
   
   const totalPortfolioValue = calculatePortfolioValue();
+
+  // Handle buy button click
+  const handleBuyClick = (stock) => {
+    setSelectedStock(stock);
+    setBuyDialogOpen(true);
+  };
+
+  // Handle buy confirmation
+  const handleBuyConfirm = async () => {
+    try {
+      const username = localStorage.getItem('username');
+      if (!username || !selectedStock) return;
+
+      const result = await buyStock(username, selectedStock.ticker, quantity);
+      
+      if (result.success) {
+        toast({
+          title: "Purchase successful",
+          description: `You bought ${quantity} shares of ${selectedStock.ticker}`,
+        });
+        
+        // Refresh data after successful purchase
+        refreshData();
+      } else {
+        toast({
+          title: "Purchase failed",
+          description: result.message || "An error occurred during purchase",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Purchase failed",
+        description: "Could not complete the transaction",
+        variant: "destructive"
+      });
+    } finally {
+      setBuyDialogOpen(false);
+      setSelectedStock(null);
+      setQuantity(1);
+    }
+  };
 
   if (loading) {
     return (
@@ -130,59 +186,16 @@ const Dashboard = () => {
             <h1 className="text-3xl font-bold">Dashboard</h1>
             <p className="text-muted-foreground">Welcome back, {user.name}</p>
           </div>
-          <div className="mt-4 md:mt-0 flex items-center bg-white px-4 py-2 rounded-lg shadow-soft">
-            <Wallet className="h-5 w-5 text-primary mr-2" />
-            <span className="font-medium">Balance:</span>
-            <span className="ml-2 font-bold">${user.balance.toLocaleString()}</span>
-          </div>
         </div>
 
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           <Card className="animate-slide-up md:col-span-3 h-[400px]">
             <CardHeader className="pb-2">
               <CardTitle>Portfolio Performance</CardTitle>
-              <CardDescription>Last 30 days</CardDescription>
+              <CardDescription>Historical data</CardDescription>
             </CardHeader>
-            <CardContent className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                  <XAxis 
-                    dataKey="date" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                  />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false}
-                    tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                    domain={['dataMin - 10', 'dataMax + 10']}
-                    tickFormatter={(value) => `$${value}`}
-                  />
-                  <Tooltip 
-                    formatter={(value) => [`$${value}`, 'Value']}
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--background))',
-                      borderColor: 'hsl(var(--border))',
-                      borderRadius: '0.375rem'
-                    }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="price" 
-                    stroke="hsl(var(--primary))" 
-                    strokeWidth={2}
-                    fill="url(#portfolioGradient)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+            <CardContent className="h-[320px] flex items-center justify-center">
+              <p className="text-muted-foreground">No performance data available</p>
             </CardContent>
           </Card>
           
@@ -235,106 +248,66 @@ const Dashboard = () => {
           </Card>
         </div>
         
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <Card className="animate-slide-up">
-            <CardHeader className="pb-2">
+        <Card className="animate-slide-up mb-8">
+          <Tabs defaultValue="stocks">
+            <CardHeader className="pb-0">
               <div className="flex items-center justify-between">
-                <CardTitle>Market Overview</CardTitle>
-                <TrendingUp className="h-5 w-5 text-primary" />
+                <CardTitle>Live Market Data</CardTitle>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b">
-                  <div>
-                    <p className="font-medium">S&P 500</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">4,583.64</p>
-                    <p className="text-xs text-success">+0.86%</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between pb-2 border-b">
-                  <div>
-                    <p className="font-medium">Nasdaq</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">14,353.64</p>
-                    <p className="text-xs text-success">+1.12%</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between pb-2 border-b">
-                  <div>
-                    <p className="font-medium">Dow Jones</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">38,059.13</p>
-                    <p className="text-xs text-destructive">-0.23%</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">Russell 2000</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">2,012.15</p>
-                    <p className="text-xs text-success">+0.47%</p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="animate-slide-up md:col-span-2 overflow-hidden h-80">
-            <Tabs defaultValue="stocks">
-              <CardHeader className="pb-0">
-                <div className="flex items-center justify-between">
-                  <CardTitle>Live Market Data</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                <TabsContent value="stocks" className="m-0">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="bg-muted/50">
-                          <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Symbol</th>
-                          <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Name</th>
-                          <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Price</th>
+            <CardContent className="p-0">
+              <TabsContent value="stocks" className="m-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-muted/50">
+                        <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Symbol</th>
+                        <th className="text-left px-6 py-3 text-sm font-medium text-muted-foreground">Name</th>
+                        <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Price</th>
+                        <th className="text-right px-6 py-3 text-sm font-medium text-muted-foreground">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {isLoadingMarketData ? (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-4 text-center">
+                            <div className="flex justify-center">
+                              <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+                            </div>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {isLoadingMarketData ? (
-                          <tr>
-                            <td colSpan={3} className="px-6 py-4 text-center">
-                              <div className="flex justify-center">
-                                <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
-                              </div>
+                      ) : marketData.length > 0 ? (
+                        marketData.map((stock) => (
+                          <tr key={stock.ticker} className="border-b hover:bg-muted/20 transition-colors">
+                            <td className="px-6 py-4 text-sm font-medium">{stock.ticker}</td>
+                            <td className="px-6 py-4 text-sm">{stock.name}</td>
+                            <td className="px-6 py-4 text-sm text-right">${stock.price.toFixed(2)}</td>
+                            <td className="px-6 py-4 text-sm text-right">
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => handleBuyClick(stock)}
+                                className="text-xs"
+                              >
+                                Buy
+                              </Button>
                             </td>
                           </tr>
-                        ) : marketData.length > 0 ? (
-                          marketData.map((stock) => (
-                            <tr key={stock.ticker} className="border-b hover:bg-muted/20 transition-colors">
-                              <td className="px-6 py-4 text-sm font-medium">{stock.ticker}</td>
-                              <td className="px-6 py-4 text-sm">{stock.name}</td>
-                              <td className="px-6 py-4 text-sm text-right">${stock.price.toFixed(2)}</td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={3} className="px-6 py-4 text-center text-muted-foreground">
-                              No market data available
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </TabsContent>
-              </CardContent>
-            </Tabs>
-          </Card>
-        </div>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-4 text-center text-muted-foreground">
+                            No market data available
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </TabsContent>
+            </CardContent>
+          </Tabs>
+        </Card>
         
         <Card className="animate-slide-up">
           <CardHeader>
@@ -355,55 +328,10 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b hover:bg-muted/20 transition-colors">
-                    <td className="px-6 py-4 text-sm">May 15, 2023</td>
-                    <td className="px-6 py-4 text-sm font-medium">AAPL</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="px-2 py-1 rounded-full text-xs bg-success/20 text-success">Buy</span>
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                      No transaction history available
                     </td>
-                    <td className="px-6 py-4 text-sm text-right">5</td>
-                    <td className="px-6 py-4 text-sm text-right">$178.42</td>
-                    <td className="px-6 py-4 text-sm text-right">$892.10</td>
-                  </tr>
-                  <tr className="border-b hover:bg-muted/20 transition-colors">
-                    <td className="px-6 py-4 text-sm">May 12, 2023</td>
-                    <td className="px-6 py-4 text-sm font-medium">MSFT</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="px-2 py-1 rounded-full text-xs bg-success/20 text-success">Buy</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right">3</td>
-                    <td className="px-6 py-4 text-sm text-right">$334.78</td>
-                    <td className="px-6 py-4 text-sm text-right">$1,004.34</td>
-                  </tr>
-                  <tr className="border-b hover:bg-muted/20 transition-colors">
-                    <td className="px-6 py-4 text-sm">May 10, 2023</td>
-                    <td className="px-6 py-4 text-sm font-medium">TSLA</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="px-2 py-1 rounded-full text-xs bg-destructive/20 text-destructive">Sell</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right">2</td>
-                    <td className="px-6 py-4 text-sm text-right">$245.36</td>
-                    <td className="px-6 py-4 text-sm text-right">$490.72</td>
-                  </tr>
-                  <tr className="border-b hover:bg-muted/20 transition-colors">
-                    <td className="px-6 py-4 text-sm">May 5, 2023</td>
-                    <td className="px-6 py-4 text-sm font-medium">AMZN</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="px-2 py-1 rounded-full text-xs bg-success/20 text-success">Buy</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right">4</td>
-                    <td className="px-6 py-4 text-sm text-right">$178.15</td>
-                    <td className="px-6 py-4 text-sm text-right">$712.60</td>
-                  </tr>
-                  <tr className="hover:bg-muted/20 transition-colors">
-                    <td className="px-6 py-4 text-sm">May 2, 2023</td>
-                    <td className="px-6 py-4 text-sm font-medium">GOOGL</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="px-2 py-1 rounded-full text-xs bg-success/20 text-success">Buy</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-right">3</td>
-                    <td className="px-6 py-4 text-sm text-right">$139.60</td>
-                    <td className="px-6 py-4 text-sm text-right">$418.80</td>
                   </tr>
                 </tbody>
               </table>
@@ -411,6 +339,49 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Buy Stock Dialog */}
+      <Dialog open={buyDialogOpen} onOpenChange={setBuyDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Buy Stock</DialogTitle>
+            <DialogDescription>
+              {selectedStock && `Purchase shares of ${selectedStock.name} (${selectedStock.ticker}) at $${selectedStock.price.toFixed(2)} per share.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="quantity" className="text-right">
+                Quantity
+              </Label>
+              <Input
+                id="quantity"
+                type="number"
+                value={quantity}
+                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                min="1"
+                className="col-span-3"
+              />
+            </div>
+            {selectedStock && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">Total</Label>
+                <div className="col-span-3 font-medium">
+                  ${(quantity * selectedStock.price).toFixed(2)}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBuyDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBuyConfirm}>
+              Confirm Purchase
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 };
