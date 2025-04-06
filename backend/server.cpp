@@ -1,8 +1,32 @@
 #include "server.h"
 #include <iostream>
 #include <thread>
-#include <netinet/in.h>
-#include <unistd.h>
+
+#ifdef _WIN32
+    // Windows-specific headers
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #include <windows.h>
+    // Windows doesn't have unistd.h
+    #define close closesocket
+    
+    // Define ssize_t for Windows
+    #ifdef _WIN64
+        typedef __int64 ssize_t;
+    #else
+        typedef int ssize_t;
+    #endif
+    
+    // Define read function for Windows
+    inline ssize_t read(SOCKET fd, void* buffer, size_t count) {
+        return recv(fd, (char*)buffer, (int)count, 0);
+    }
+#else
+    // UNIX/Linux/macOS headers
+    #include <netinet/in.h>
+    #include <unistd.h>
+#endif
+
 #include <cstring>
 #include <sstream>
 #include "handlers/auth.h"
@@ -13,21 +37,103 @@
 Server::Server(int port) : port(port) {}
 
 void Server::start() {
+#ifdef _WIN32
+    // Initialize Winsock
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "Failed to initialize Winsock" << std::endl;
+        return;
+    }
+    std::cout << "Winsock initialized successfully" << std::endl;
+#endif
+
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+        std::cerr << "Socket creation failed with error: " << 
+#ifdef _WIN32
+            WSAGetLastError() 
+#else
+            errno
+#endif
+            << std::endl;
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return;
+    }
+    std::cout << "Socket created successfully" << std::endl;
+
+    // Optional: Set socket to reuse address
+    int opt = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt)) < 0) {
+        std::cerr << "setsockopt failed" << std::endl;
+        close(server_fd);
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return;
+    }
+
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
 
-    bind(server_fd, (struct sockaddr*)&address, sizeof(address));
-    listen(server_fd, 5);
+    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        std::cerr << "Bind failed with error: " << 
+#ifdef _WIN32
+            WSAGetLastError() 
+#else
+            errno
+#endif
+            << std::endl;
+        close(server_fd);
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return;
+    }
+    std::cout << "Bind successful" << std::endl;
+
+    if (listen(server_fd, 5) < 0) {
+        std::cerr << "Listen failed with error: " << 
+#ifdef _WIN32
+            WSAGetLastError() 
+#else
+            errno
+#endif
+            << std::endl;
+        close(server_fd);
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return;
+    }
 
     std::cout << "Server listening on port " << port << std::endl;
 
     while (true) {
+        std::cout << "Waiting for connection..." << std::endl;
         int client_socket = accept(server_fd, nullptr, nullptr);
+        if (client_socket < 0) {
+            std::cerr << "Accept failed with error: " << 
+#ifdef _WIN32
+                WSAGetLastError() 
+#else
+                errno
+#endif
+                << std::endl;
+            continue;
+        }
+        std::cout << "Client connected" << std::endl;
         std::thread(&Server::handleClient, this, client_socket).detach();
     }
+
+    // Cleanup (though this part won't be reached in this implementation)
+    close(server_fd);
+#ifdef _WIN32
+    WSACleanup();
+#endif
 }
 
 // Parse an HTTP request to extract the command
