@@ -39,8 +39,11 @@
 #include <chrono>
 #include <fstream>
 #undef max
+#include <unordered_map>
+#include <mutex>
 
-
+static std::unordered_map<std::string, std::string> sessions;
+static std::mutex sessions_mutex;
 
 // Define Transaction structure
 struct Transaction {
@@ -296,11 +299,15 @@ std::string Server::parseHttpRequest(const std::string& request) {
 }
 
 // Create an HTTP response
-std::string Server::createHttpResponse(const std::string& content, bool success) {
+std::string Server::createHttpResponse(const std::string& content, bool success, const std::string& sessionId) {
     std::stringstream response;
     response << "HTTP/1.1 " << (success ? "200 OK" : "400 Bad Request") << "\r\n";
     response << "Content-Type: text/plain\r\n";
-    response << "Access-Control-Allow-Origin: *\r\n";  // CORS header
+    if (!sessionId.empty()) {
+        response << "Set-Cookie: sessionId=" << sessionId << "; HttpOnly\r\n";
+    }
+    response << "Access-Control-Allow-Origin: http://localhost:8080\r\n";  // Use your client's URL
+response << "Access-Control-Allow-Credentials: true\r\n";
     response << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
     response << "Access-Control-Allow-Headers: Content-Type\r\n";
     response << "Content-Length: " << content.length() << "\r\n";
@@ -309,6 +316,28 @@ std::string Server::createHttpResponse(const std::string& content, bool success)
     
     return response.str();
 }
+
+
+
+std::string getSessionIdFromRequest(const std::string& request) {
+    std::string cookieToken = "Cookie:";
+    size_t pos = request.find(cookieToken);
+    if (pos != std::string::npos) {
+        size_t end = request.find("\r\n", pos);
+        std::string cookieLine = request.substr(pos, end - pos);
+        size_t sPos = cookieLine.find("sessionId=");
+        if (sPos != std::string::npos) {
+            sPos += std::string("sessionId=").length();
+            size_t semicolon = cookieLine.find(";", sPos);
+            if (semicolon == std::string::npos)
+                return cookieLine.substr(sPos);
+            else
+                return cookieLine.substr(sPos, semicolon - sPos);
+        }
+    }
+    return "";
+}
+
 
 void Server::handleClient(int clientSocket) {
     char buffer[4096] = {0};
@@ -323,21 +352,41 @@ void Server::handleClient(int clientSocket) {
     bool success = true;
 
     // Process the command
-    if (command.rfind("LOGIN|", 0) == 0) {
-        std::istringstream iss(command);
-        std::string action, username, password;
-        std::getline(iss, action, '|');
-        std::getline(iss, username, '|');
-        std::getline(iss, password);
+if (command.rfind("LOGIN|", 0) == 0) {
+    std::istringstream iss(command);
+    std::string action, username, password;
+    std::getline(iss, action, '|');
+    std::getline(iss, username, '|');
+    std::getline(iss, password);
     
-        if (!username.empty() && !password.empty()) {
-            result = loginUser(username, password) ? "OK|Login successful" : "ERROR|Invalid credentials";
-            success = result.substr(0, 2) == "OK";
+    if (!username.empty() && !password.empty()) {
+        std::string sessionId;  // To hold our generated session ID
+        if (loginUser(username, password)) {
+            // Generate a simple session ID (for demo purposes only)
+            sessionId = "session_" + username + "_" + std::to_string(std::time(nullptr));
+            {
+                std::lock_guard<std::mutex> lock(sessions_mutex);
+                sessions[sessionId] = username;
+            }
+            // Return the username as part of the response.
+            // The response format will be: "OK|Logged in|<username>"
+            result = "OK|Logged in|" + username;
+            success = true;
+            std::string response = createHttpResponse(result, success, sessionId);
+            send(clientSocket, response.c_str(), response.size(), 0);
+            close(clientSocket);
+            return;
         } else {
-            result = "ERROR|Invalid format";
+            result = "ERROR|Invalid credentials";
             success = false;
         }
+
+    } else {
+        result = "ERROR|Invalid format";
+        success = false;
     }
+}
+
     else if (command.rfind("REGISTER|", 0) == 0) {
         std::istringstream iss(command);
         std::string action, username, password;
@@ -375,10 +424,24 @@ void Server::handleClient(int clientSocket) {
         result = sellStock(user, ticker, qty) ? "OK|Trade completed" : "ERROR|Sell failed";
         success = result.substr(0, 2) == "OK";
     } else if (command.rfind("PORTFOLIO|", 0) == 0) {
-        std::string username = command.substr(10);
-        result = getPortfolio(username);
+    // Get the sessionId from the HTTP headers (from requestData)
+    std::string sessionId = getSessionIdFromRequest(requestData);
+    std::string sessionUser;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        if (sessions.find(sessionId) != sessions.end()) {
+            sessionUser = sessions[sessionId];
+        }
+    }
+    if (!sessionUser.empty()) {
+        result = getPortfolio(sessionUser);
         success = true;
-    } else if (command.rfind("OPTIONS", 0) == 0 || requestData.rfind("OPTIONS", 0) == 0) {
+    } else {
+        result = "ERROR|Not authenticated";
+        success = false;
+    }
+}
+ else if (command.rfind("OPTIONS", 0) == 0 || requestData.rfind("OPTIONS", 0) == 0) {
         // Handle preflight CORS requests
         result = "";
         success = true;
