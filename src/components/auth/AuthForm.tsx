@@ -17,7 +17,6 @@ const sendBackendCommand = async (command: string): Promise<string> => {
       credentials: 'include', // ensures cookies are sent/received
       body: command,
     });
-    
 
     const rawResponse = await response.text();
     const cleanResponse = rawResponse.trim().split("\r\n\r\n").pop() || rawResponse;
