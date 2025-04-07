@@ -14,20 +14,24 @@ const sendBackendCommand = async (command: string): Promise<string> => {
       headers: {
         'Content-Type': 'text/plain',
       },
-      credentials: 'include', // ensures cookies are sent/received
-      body: command,
+      credentials: 'include',
+      body: `${command}\n`,
     });
 
     const rawResponse = await response.text();
-    const cleanResponse = rawResponse.trim().split("\r\n\r\n").pop() || rawResponse;
 
-    // Don't throw yet—return the body even if it's an error
-    return cleanResponse;
+    // Find the last double line break — the HTTP body starts after this
+    const separator = "\r\n\r\n";
+    const splitIndex = rawResponse.lastIndexOf(separator);
+    const cleanResponse = splitIndex !== -1 ? rawResponse.substring(splitIndex + separator.length) : rawResponse;
+
+    return cleanResponse.trim();
   } catch (error) {
     console.error('Error communicating with backend:', error);
     throw error;
   }
 };
+
 
 
 interface AuthFormProps {
