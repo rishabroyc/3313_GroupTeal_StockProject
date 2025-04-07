@@ -41,6 +41,9 @@
 #undef max
 #include <unordered_map>
 #include <mutex>
+#include <queue>
+#include <functional>
+#include <memory>
 
 static std::unordered_map<std::string, std::string> sessions;
 static std::mutex sessions_mutex;
@@ -173,105 +176,132 @@ void Server::start() {
     // Initialize Winsock
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cerr << "Failed to initialize Winsock" << std::endl;
+        std::cerr << "Failed to initialize Winsock: " << WSAGetLastError() << std::endl;
         return;
     }
-    std::cout << "Winsock initialized successfully" << std::endl;
 #endif
 
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    // Create server socket
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
-        std::cerr << "Socket creation failed with error: " <<
+        std::cerr << "Socket creation failed: " << 
 #ifdef _WIN32
             WSAGetLastError()
 #else
             errno
 #endif
-            << std::endl;
-#ifdef _WIN32
-        WSACleanup();
-#endif
+        << std::endl;
         return;
     }
-    std::cout << "Socket created successfully" << std::endl;
 
-    // Optional: Set socket to reuse address
+    // Set socket option to reuse address
     int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt)) < 0) {
-        std::cerr << "setsockopt failed" << std::endl;
-        close(server_fd);
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, 
 #ifdef _WIN32
-        WSACleanup();
+        (const char*)&opt, 
+#else
+        &opt, 
 #endif
+        sizeof(opt)) < 0) {
+        std::cerr << "setsockopt failed: " << 
+#ifdef _WIN32
+            WSAGetLastError()
+#else
+            errno
+#endif
+        << std::endl;
+        close(server_fd);
         return;
     }
 
+    // Bind socket
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
 
     if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
-        std::cerr << "Bind failed with error: " <<
+        std::cerr << "Bind failed: Port " << port << ", Error: " << 
 #ifdef _WIN32
             WSAGetLastError()
 #else
             errno
 #endif
-            << std::endl;
+        << std::endl;
         close(server_fd);
-#ifdef _WIN32
-        WSACleanup();
-#endif
         return;
     }
-    std::cout << "Bind successful" << std::endl;
 
-    if (listen(server_fd, 5) < 0) {
-        std::cerr << "Listen failed with error: " <<
+    // Listen
+    if (listen(server_fd, SOMAXCONN) < 0) {
+        std::cerr << "Listen failed: " << 
 #ifdef _WIN32
             WSAGetLastError()
 #else
             errno
 #endif
-            << std::endl;
+        << std::endl;
         close(server_fd);
-#ifdef _WIN32
-        WSACleanup();
-#endif
         return;
     }
 
     std::cout << "Server listening on port " << port << std::endl;
 
-    //Load saved transactions from file
-    //loadTransactionsFromCSV("db/transactions.csv");
+    // Initialize thread pool and connection manager
+    thread_pool = std::make_unique<ThreadPool>(10);  // 10 worker threads
+    connection_manager = std::make_unique<ConnectionManager>(100);  // Max 100 concurrent connections
 
+    // Start deadlock monitoring
+    monitorDeadlocks();
+
+    // Main accept loop
     while (true) {
-        std::cout << "Waiting for connection..." << std::endl;
-        int client_socket = accept(server_fd, nullptr, nullptr);
+        sockaddr_in client_address;
+        socklen_t client_address_len = sizeof(client_address);
+        
+        // Accept a connection
+        int client_socket = accept(server_fd, 
+            (struct sockaddr*)&client_address, 
+            &client_address_len);
+        
         if (client_socket < 0) {
-            std::cerr << "Accept failed with error: " <<
+            std::cerr << "Accept failed: " << 
 #ifdef _WIN32
                 WSAGetLastError()
 #else
                 errno
 #endif
-                << std::endl;
+            << std::endl;
             continue;
         }
-        std::cout << "Client connected" << std::endl;
-        std::thread(&Server::handleClient, this, client_socket).detach();
+
+        // Check if we can accept more connections
+        if (!connection_manager->acquire_connection()) {
+            std::cerr << "Max connections reached. Rejecting client." << std::endl;
+            close(client_socket);
+            continue;
+        }
+
+        // Enqueue client handling task
+        thread_pool->enqueue([this, client_socket]() {
+            try {
+                handleClient(client_socket);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Error handling client: " << e.what() << std::endl;
+            }
+            
+            // Always release the connection
+            connection_manager->release_connection();
+            close(client_socket);
+        });
     }
 
-    // Cleanup (though this part won't be reached in this implementation)
-    close(server_fd);
+    // Cleanup (this part won't be reached due to infinite loop)
 #ifdef _WIN32
     WSACleanup();
 #endif
 }
-
-
 // Parse an HTTP request to extract the command
 std::string Server::parseHttpRequest(const std::string& request) {
     // Check if this is a GET request
