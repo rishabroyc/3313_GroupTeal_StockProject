@@ -324,30 +324,36 @@ void Server::handleClient(int clientSocket) {
 
     // Process the command
     if (command.rfind("LOGIN|", 0) == 0) {
-        auto parts = command.substr(6);
-        auto pos = parts.find("|");
-        if (pos != std::string::npos) {
-            std::string username = parts.substr(0, pos);
-            std::string password = parts.substr(pos+1);
+        std::istringstream iss(command);
+        std::string action, username, password;
+        std::getline(iss, action, '|');
+        std::getline(iss, username, '|');
+        std::getline(iss, password);
+    
+        if (!username.empty() && !password.empty()) {
             result = loginUser(username, password) ? "OK|Login successful" : "ERROR|Invalid credentials";
             success = result.substr(0, 2) == "OK";
         } else {
             result = "ERROR|Invalid format";
             success = false;
         }
-    } else if (command.rfind("REGISTER|", 0) == 0) {
-        auto parts = command.substr(9);
-        auto pos = parts.find("|");
-        if (pos != std::string::npos) {
-            std::string username = parts.substr(0, pos);
-            std::string password = parts.substr(pos+1);
+    }
+    else if (command.rfind("REGISTER|", 0) == 0) {
+        std::istringstream iss(command);
+        std::string action, username, password;
+        std::getline(iss, action, '|');
+        std::getline(iss, username, '|');
+        std::getline(iss, password);
+    
+        if (!username.empty() && !password.empty()) {
             result = registerUser(username, password) ? "OK|User registered" : "ERROR|User exists";
             success = result.substr(0, 2) == "OK";
         } else {
             result = "ERROR|Invalid format";
             success = false;
         }
-    } else if (command == "GET_MARKET") {
+    }
+     else if (command == "GET_MARKET") {
         result = getMarketData();
         success = true;
     } else if (command.rfind("BUY|", 0) == 0) {

@@ -86,7 +86,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess }) => {
       // Parse the response
       if (response.startsWith('OK|')) {
         // Store the username in localStorage
-        localStorage.setItem('username', username);
+        sessionStorage.setItem('user', JSON.stringify({ username }));
         
         toast.success(type === 'login' 
           ? 'Successfully signed in' 

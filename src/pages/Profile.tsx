@@ -127,7 +127,10 @@ const Profile = () => {
                 </div>
                 <div className="pt-4 w-full">
                   <p className="text-sm font-medium mb-1">Account Balance</p>
-                  <p className="text-2xl font-bold">${user.balance.toLocaleString()}</p>
+                  <p className="text-2xl font-bold">
+                    ${typeof user?.balance === 'number' ? user.balance.toLocaleString() : '0.00'}
+                  </p>
+
                 </div>
               </div>
             </CardContent>
