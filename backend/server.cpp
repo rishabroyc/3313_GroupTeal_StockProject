@@ -169,7 +169,7 @@ std::string getLast3BuysFromCSV(const std::string& username, const std::string& 
 }
 
 
-Server::Server(int port) : port(port) {}  // ✅ this defines the constructor
+Server::Server(int port) : port(port) {}  //this defines the constructor
 
 void Server::start() {
 #ifdef _WIN32
