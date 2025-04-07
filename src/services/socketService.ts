@@ -14,13 +14,18 @@ const SERVER_PORT = 8081;  // Make sure this matches your C++ server port
 export const sendCommand = async (command: string): Promise<string> => {
   try {
     // Using fetch API to communicate with the backend
-    const response = await fetch(`http://${SERVER_URL}:${SERVER_PORT}`, {
+    const authToken = localStorage.getItem('authToken');
+    const response = await fetch(`http://localhost:8081`, {
       method: 'POST',
-      body: command,
       headers: {
         'Content-Type': 'text/plain',
       },
+      credentials: 'include',
+      body: command,
     });
+    
+    
+
     
     if (!response.ok) {
       throw new Error(`Server returned ${response.status}: ${response.statusText}`);

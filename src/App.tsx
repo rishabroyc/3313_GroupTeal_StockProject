@@ -19,17 +19,11 @@ import ContactPage from "./pages/Contact";
 
 // Add this component right before the queryClient definition
 const ProtectedRoute = ({ children }) => {
-  // Get the username from localStorage
-  const username = localStorage.getItem('username');
-  
-  // If no username is found, redirect to login
-  if (!username) {
-    return <Navigate to="/login" />;
-  }
-  
-  // If username exists, render the children
+  // For demo purposes, we simply render the children.
+  // In production, you’d call a /check_session endpoint to verify authentication.
   return children;
 };
+
 
 const queryClient = new QueryClient();
 

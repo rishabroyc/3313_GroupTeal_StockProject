@@ -17,8 +17,10 @@ const sendBackendCommand = async (command: string): Promise<string> => {
       headers: {
         'Content-Type': 'text/plain',
       },
+      credentials: 'include', // ensures cookies are sent/received
       body: command,
     });
+    
     
     const rawResponse = await response.text();
     console.log(`Raw response: ${rawResponse}`);
@@ -85,21 +87,22 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess }) => {
       
       // Parse the response
       if (response.startsWith('OK|')) {
-        // Store the username in localStorage
-        localStorage.setItem('username', username);
+        // Assuming the response is formatted as "OK|Logged in|<username>"
+        const parts = response.split('|');
+        const loggedInUsername = parts[2]; // Get the username from the response
+        // Store the username for display purposes (even though session management is done via cookies)
+        localStorage.setItem('username', loggedInUsername);
         
-        toast.success(type === 'login' 
-          ? 'Successfully signed in' 
-          : 'Account created successfully'
+        toast.success(
+          type === 'login' ? 'Successfully signed in' : 'Account created successfully'
         );
-        console.log("About to navigate to dashboard");
         if (onSuccess) {
           onSuccess();
         } else {
           navigate('/dashboard');
-          console.log("Navigation called");
         }
-      } else if (response.startsWith('ERROR|')) {
+      }
+       else if (response.startsWith('ERROR|')) {
         // Extract the error message
         const errorMessage = response.substring(6);
         toast.error(errorMessage);
