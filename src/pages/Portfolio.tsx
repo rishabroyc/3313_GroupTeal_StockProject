@@ -17,7 +17,7 @@ const Portfolio = () => {
 
   useEffect(() => {
     // Check if user is logged in
-    const userJson = sessionStorage.getItem('user');
+    const userJson = localStorage.getItem('user');
     
     if (!userJson) {
       navigate('/login');

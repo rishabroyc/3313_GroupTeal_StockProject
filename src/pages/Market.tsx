@@ -32,12 +32,12 @@ const Market = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const userJson = sessionStorage.getItem('user');
-    if (!userJson) {
+    const username = localStorage.getItem('username');
+    if (!username) {
       navigate('/login');
       return;
     }
-    setUser(JSON.parse(userJson));
+    setUser({ name: username });
     setLoading(false);
   }, [navigate]);
 

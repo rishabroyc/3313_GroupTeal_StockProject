@@ -10,8 +10,14 @@ import { toast } from 'sonner';
 import { LogOut, User, Shield, Bell, CreditCard } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+interface User {
+  name: string;
+  email?: string;
+  phone?: string;
+  balance?: number;
+}
 const Profile = () => {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileForm, setProfileForm] = useState({
     name: '',
@@ -27,17 +33,23 @@ const Profile = () => {
 
   useEffect(() => {
     // Check if user is logged in
-    const userJson = sessionStorage.getItem('user');
-    
-    if (!userJson) {
+    const username = localStorage.getItem('username');
+    if (!username) {
       navigate('/login');
       return;
     }
     
-    const userData = JSON.parse(userJson);
+    // Create user data with empty optional fields
+    const userData: User = {
+      name: username,
+      email: '',
+      phone: '',
+      balance: 0
+    };
+
     setUser(userData);
     setProfileForm({
-      name: userData.name || '',
+      name: userData.name,
       email: userData.email || '',
       phone: userData.phone || '',
     });
@@ -47,15 +59,18 @@ const Profile = () => {
   const handleProfileUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // In a real app, this would be an API call
-    const updatedUser = {
+    if (!user) return;
+    
+    // Update the user object
+    const updatedUser: User = {
       ...user,
       name: profileForm.name,
       email: profileForm.email,
       phone: profileForm.phone,
     };
     
-    sessionStorage.setItem('user', JSON.stringify(updatedUser));
+    // Store in localStorage instead of sessionStorage to be consistent
+    localStorage.setItem('userProfile', JSON.stringify(updatedUser));
     setUser(updatedUser);
     
     toast.success('Profile updated successfully');
@@ -81,7 +96,7 @@ const Profile = () => {
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('user');
+    localStorage.removeItem('username');
     toast.success('Logged out successfully');
     navigate('/');
   };
