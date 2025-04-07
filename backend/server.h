@@ -5,7 +5,7 @@
 
 class Server {
 public:
-    Server(int port);
+    explicit Server(int port);
     void start();
 
 private:
