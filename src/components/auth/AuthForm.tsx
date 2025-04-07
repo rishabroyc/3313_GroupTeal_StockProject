@@ -9,9 +9,6 @@ import { EyeIcon, EyeOffIcon } from 'lucide-react';
 
 const sendBackendCommand = async (command: string): Promise<string> => {
   try {
-    console.log(`Sending command: ${command}`);
-    
-    // Using fetch API to directly communicate with the C++ backend
     const response = await fetch('http://localhost:8081', {
       method: 'POST',
       headers: {
@@ -21,20 +18,18 @@ const sendBackendCommand = async (command: string): Promise<string> => {
       body: command,
     });
     
-    
+
     const rawResponse = await response.text();
-    console.log(`Raw response: ${rawResponse}`);
-    
-    if (!response.ok) {
-      throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-    }
-    
-    return rawResponse;
+    const cleanResponse = rawResponse.trim().split("\r\n\r\n").pop() || rawResponse;
+
+    // Don't throw yet—return the body even if it's an error
+    return cleanResponse;
   } catch (error) {
     console.error('Error communicating with backend:', error);
     throw error;
   }
 };
+
 
 interface AuthFormProps {
   type: 'login' | 'register';

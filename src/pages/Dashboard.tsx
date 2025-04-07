@@ -4,25 +4,26 @@ import Layout from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Wallet } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { getMarketData, getPortfolio, buyStock, sellStock, getRecentTransactions, getRecentSells  } from '@/services/socketService';
+import { getMarketData, getPortfolio, buyStock, sellStock, getRecentTransactions, getRecentSells } from '@/services/socketService';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   // State for market and portfolio data
   const [marketData, setMarketData] = useState([]);
   const [portfolioData, setPortfolioData] = useState([]);
   const [isLoadingMarketData, setIsLoadingMarketData] = useState(true);
   const [isLoadingPortfolio, setIsLoadingPortfolio] = useState(true);
-  
+
   // State for buy/sell dialogs
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
   const [sellDialogOpen, setSellDialogOpen] = useState(false);
@@ -37,26 +38,26 @@ const Dashboard = () => {
   useEffect(() => {
     // Check if user is logged in
     const username = localStorage.getItem('username');
-    
+
     if (!username) {
       navigate('/login');
       return;
     }
-    
+
     // Create a user object with just the username
     const userObj = {
       name: username
     };
-    
+
     setUser(userObj);
-    
+
     const fetchRecentTransactions = async () => {
       const result = await getRecentTransactions(username);
       if (result.success && result.data) {
         setRecentTransactions(result.data);
       }
     };
-    
+
     const fetchRecentSells = async () => {
       const result = await getRecentSells(username);
       if (result.success && result.data) {
@@ -80,7 +81,7 @@ const Dashboard = () => {
         setIsLoadingMarketData(false);
       }
     };
-    
+
     // Fetch portfolio data
     const fetchPortfolioData = async () => {
       try {
@@ -97,47 +98,43 @@ const Dashboard = () => {
         setIsLoadingPortfolio(false);
       }
     };
-    
+
     // Call both fetch functions
     fetchMarketData();
     fetchPortfolioData();
     fetchRecentTransactions();
     fetchRecentSells();
 
-    
+
     // Complete loading
     setLoading(false);
   }, [navigate]);
-  
+
   // Function to refresh data after a purchase
-  const refreshData = () => {
+  const refreshData = async () => {
     const username = localStorage.getItem('username');
-    if (username) {
-      setIsLoadingMarketData(true);
-      setIsLoadingPortfolio(true);
-      
-      getMarketData()
-        .then(result => {
-          if (result.success && result.stocks) {
-            setMarketData(result.stocks);
-          }
-        })
-        .finally(() => setIsLoadingMarketData(false));
-      
-      getPortfolio(username)
-        .then(result => {
-          if (result.success && result.holdings) {
-            setPortfolioData(result.holdings);
-          }
-        })
-        .finally(() => setIsLoadingPortfolio(false));
+    if (!username) return;
+  
+    try {
+      const [marketRes, portfolioRes, transactionsRes] = await Promise.all([
+        getMarketData(),
+        getPortfolio(username),
+        getRecentTransactions(username)
+      ]);
+  
+      if (marketRes.success) setMarketData(marketRes.stocks);
+      if (portfolioRes.success) setPortfolioData(portfolioRes.holdings);
+      if (transactionsRes.success) setRecentTransactions(transactionsRes.data);
+    } catch (error) {
+      console.error("Error refreshing data:", error);
     }
   };
   
+
   // Calculate total portfolio value
   const calculatePortfolioValue = () => {
     if (portfolioData.length === 0 || marketData.length === 0) return 0;
-    
+
     return portfolioData.reduce((total, holding) => {
       const stock = marketData.find(s => s.ticker === holding.ticker);
       if (stock) {
@@ -146,7 +143,7 @@ const Dashboard = () => {
       return total;
     }, 0);
   };
-  
+
   const totalPortfolioValue = calculatePortfolioValue();
 
   // Handle buy button click
@@ -166,14 +163,14 @@ const Dashboard = () => {
     console.log("Sell button clicked for:", stock);
     setSelectedStock(stock);
     setDialogAction('sell');
-    
+
     // Find how many shares the user owns of this stock
     const holding = portfolioData.find(h => h.ticker === stock.ticker);
     const maxShares = holding ? holding.quantity : 0;
-    
+
     // Set initial quantity to 1 or max available if less than 1
     setQuantity(maxShares > 0 ? 1 : 0);
-    
+
     // Force update with a slight delay to ensure state is properly updated
     setTimeout(() => {
       setBuyDialogOpen(true);
@@ -187,21 +184,21 @@ const Dashboard = () => {
       if (!username || !selectedStock) return;
 
       let result;
-      
+
       if (dialogAction === 'buy') {
         result = await buyStock(username, selectedStock.ticker, quantity);
       } else {
         result = await sellStock(username, selectedStock.ticker, quantity);
       }
-      
+
       if (result.success) {
         toast({
           title: dialogAction === 'buy' ? "Purchase successful" : "Sale successful",
-          description: dialogAction === 'buy' 
-            ? `You bought ${quantity} shares of ${selectedStock.ticker}` 
+          description: dialogAction === 'buy'
+            ? `You bought ${quantity} shares of ${selectedStock.ticker}`
             : `You sold ${quantity} shares of ${selectedStock.ticker}`,
         });
-        
+
         // Refresh data after successful transaction
         refreshData();
       } else {
@@ -223,6 +220,25 @@ const Dashboard = () => {
       setQuantity(1);
     }
   };
+
+  const buildPerformanceData = () => {
+    return portfolioData
+      .filter(holding => holding.quantity > 0)
+      .map(holding => {
+        const buys = recentTransactions.filter(txn => txn.ticker === holding.ticker && txn.type === 'BUY');
+        const totalShares = buys.reduce((sum, txn) => sum + txn.quantity, 0);
+        const totalCost = buys.reduce((sum, txn) => sum + (txn.quantity * txn.price), 0);
+        const avgBuyPrice = totalShares > 0 ? totalCost / totalShares : 0;
+        const market = marketData.find(stock => stock.ticker === holding.ticker);
+        const currentPrice = market?.price || 0;
+        return {
+          ticker: holding.ticker,
+          avgBuyPrice: Math.round(avgBuyPrice * 100) / 100,
+          currentPrice: Math.round(currentPrice * 100) / 100
+        };
+      });
+  };
+
 
   if (loading) {
     return (
@@ -250,11 +266,24 @@ const Dashboard = () => {
               <CardTitle>Portfolio Performance</CardTitle>
               <CardDescription>Historical data</CardDescription>
             </CardHeader>
-            <CardContent className="h-[320px] flex items-center justify-center">
-              <p className="text-muted-foreground">No performance data available</p>
+            <CardContent className="h-[320px]">
+              {portfolioData.length === 0 ? (
+                <p className="text-muted-foreground">No performance data available</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={buildPerformanceData()}>
+                    <XAxis dataKey="ticker" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="avgBuyPrice" name="Buy Price" fill="#8884d8" />
+                    <Bar dataKey="currentPrice" name="Current Price" fill="#82ca9d" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
-          
+
           <Card className="animate-slide-up">
             <CardHeader>
               <CardTitle>Portfolio Summary</CardTitle>
@@ -264,7 +293,7 @@ const Dashboard = () => {
                 <p className="text-muted-foreground text-sm">Total Value</p>
                 <p className="text-2xl font-bold">${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
               </div>
-              
+
               <div className="pt-4 border-t">
                 <p className="text-muted-foreground text-sm mb-2">Your Holdings</p>
                 <div className="space-y-3">
@@ -279,7 +308,7 @@ const Dashboard = () => {
                         // Find stock price from market data
                         const stockInfo = marketData.find(stock => stock.ticker === holding.ticker);
                         const price = stockInfo?.price || 0;
-                        
+
                         return (
                           <div key={holding.ticker} className="flex items-center justify-between">
                             <div>
@@ -305,7 +334,7 @@ const Dashboard = () => {
             </CardContent>
           </Card>
         </div>
-        
+
         <Card className="animate-slide-up mb-8">
           <Tabs defaultValue="stocks">
             <CardHeader className="pb-0">
@@ -342,16 +371,16 @@ const Dashboard = () => {
                             <td className="px-6 py-4 text-sm text-right">${stock.price.toFixed(2)}</td>
                             <td className="px-6 py-4 text-sm text-right">
                               <div className="flex space-x-2 justify-end">
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => handleBuyClick(stock)}
                                   className="text-xs"
                                 >
                                   Buy
                                 </Button>
-                                <Button 
-                                  variant="outline" 
+                                <Button
+                                  variant="outline"
                                   size="sm"
                                   onClick={() => handleSellClick(stock)}
                                   className="text-xs"
@@ -376,7 +405,7 @@ const Dashboard = () => {
             </CardContent>
           </Tabs>
         </Card>
-        
+
         <Card className="animate-slide-up">
           <CardHeader>
             <CardTitle>Recent Transactions</CardTitle>
@@ -396,24 +425,24 @@ const Dashboard = () => {
                   </tr>
                 </thead>
                 <tbody>
-                {recentTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
-                      No transaction history available
-                    </td>
-                  </tr>
-                ) : (
-                  recentTransactions.map((txn, idx) => (
-                    <tr key={idx} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-6 py-4 text-sm">{txn.date || 'N/A'}</td>
-                      <td className="px-6 py-4 text-sm">{txn.ticker}</td>
-                      <td className="px-6 py-4 text-sm">{txn.type}</td>
-                      <td className="px-6 py-4 text-sm text-right">{txn.quantity}</td>
-                      <td className="px-6 py-4 text-sm text-right">${txn.price.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm text-right">${(txn.price * txn.quantity).toFixed(2)}</td>
+                  {recentTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                        No transaction history available
+                      </td>
                     </tr>
-                  ))
-                )}
+                  ) : (
+                    recentTransactions.map((txn, idx) => (
+                      <tr key={idx} className="border-b hover:bg-muted/20 transition-colors">
+                        <td className="px-6 py-4 text-sm">{txn.date || 'N/A'}</td>
+                        <td className="px-6 py-4 text-sm">{txn.ticker}</td>
+                        <td className="px-6 py-4 text-sm">{txn.type}</td>
+                        <td className="px-6 py-4 text-sm text-right">{txn.quantity}</td>
+                        <td className="px-6 py-4 text-sm text-right">${txn.price.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm text-right">${(txn.price * txn.quantity).toFixed(2)}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
                 <tbody>
                   {recentSells.length === 0 ? (
@@ -425,16 +454,16 @@ const Dashboard = () => {
                   ) : (
                     recentSells.map((txn, idx) => (
                       <tr key={idx} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-6 py-4 text-sm">{txn.date || 'N/A'}</td>
-                      <td className="px-6 py-4 text-sm">{txn.ticker}</td>
-                      <td className="px-6 py-4 text-sm">{txn.type}</td>
-                      <td className="px-6 py-4 text-sm text-right">{txn.quantity}</td>
-                      <td className="px-6 py-4 text-sm text-right">${txn.price.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm text-right">${(txn.price * txn.quantity).toFixed(2)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
+                        <td className="px-6 py-4 text-sm">{txn.date || 'N/A'}</td>
+                        <td className="px-6 py-4 text-sm">{txn.ticker}</td>
+                        <td className="px-6 py-4 text-sm">{txn.type}</td>
+                        <td className="px-6 py-4 text-sm text-right">{txn.quantity}</td>
+                        <td className="px-6 py-4 text-sm text-right">${txn.price.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-sm text-right">${(txn.price * txn.quantity).toFixed(2)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
               </table>
             </div>
           </CardContent>
@@ -449,13 +478,13 @@ const Dashboard = () => {
               <div>
                 <h3 className="text-lg font-semibold">{dialogAction === 'buy' ? 'Buy' : 'Sell'} Stock</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {dialogAction === 'buy' 
+                  {dialogAction === 'buy'
                     ? `Purchase shares of ${selectedStock.name} (${selectedStock.ticker}) at ${selectedStock.price.toFixed(2)} per share.`
                     : `Sell shares of ${selectedStock.name} (${selectedStock.ticker}) at ${selectedStock.price.toFixed(2)} per share.`
                   }
                 </p>
               </div>
-              
+
               <div className="grid gap-4 py-4">
                 {dialogAction === 'sell' && (
                   <div className="text-sm mb-2">
@@ -470,7 +499,7 @@ const Dashboard = () => {
                     })()}
                   </div>
                 )}
-                
+
                 <div className="grid grid-cols-4 items-center gap-4">
                   <label htmlFor="quantity" className="text-right text-sm">
                     Quantity
@@ -481,7 +510,7 @@ const Dashboard = () => {
                     value={quantity}
                     onChange={(e) => {
                       const newValue = parseInt(e.target.value) || 0;
-                      
+
                       // For sell, limit to shares owned
                       if (dialogAction === 'sell') {
                         const holding = portfolioData.find(h => h.ticker === selectedStock.ticker);
@@ -499,7 +528,7 @@ const Dashboard = () => {
                     className="col-span-3"
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-4 items-center gap-4">
                   <span className="text-right text-sm">Total</span>
                   <div className="col-span-3 font-medium">
@@ -507,12 +536,12 @@ const Dashboard = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex justify-end space-x-2">
                 <Button variant="ghost" onClick={() => setBuyDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   onClick={handleTransactionConfirm}
                   disabled={dialogAction === 'sell' && (() => {
                     const holding = portfolioData.find(h => h.ticker === selectedStock.ticker);
