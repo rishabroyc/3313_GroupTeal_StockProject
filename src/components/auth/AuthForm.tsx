@@ -32,8 +32,6 @@ const sendBackendCommand = async (command: string): Promise<string> => {
   }
 };
 
-
-
 interface AuthFormProps {
   type: 'login' | 'register';
   onSuccess?: () => void;
@@ -88,19 +86,31 @@ const AuthForm: React.FC<AuthFormProps> = ({ type, onSuccess }) => {
         // Assuming the response is formatted as "OK|Logged in|<username>"
         const parts = response.split('|');
         const loggedInUsername = parts[2]; // Get the username from the response
-        // Store the username for display purposes (even though session management is done via cookies)
-        localStorage.setItem('username', loggedInUsername);
         
-        toast.success(
-          type === 'login' ? 'Successfully signed in' : 'Account created successfully'
-        );
-        if (onSuccess) {
-          onSuccess();
+        if (type === 'login') {
+          // Store the username for display purposes (even though session management is done via cookies)
+          localStorage.setItem('username', loggedInUsername);
+          
+          toast.success('Successfully signed in');
+          
+          if (onSuccess) {
+            onSuccess();
+          } else {
+            navigate('/dashboard');
+          }
         } else {
-          navigate('/dashboard');
+          // This is registration success
+          toast.success('Account created successfully! Please log in.');
+          
+          // Redirect to login page with newly created username pre-filled
+          navigate('/login', { 
+            state: { 
+              registeredUsername: username,
+              message: 'Your account has been created successfully. Please sign in with your credentials.'
+            } 
+          });
         }
-      }
-       else if (response.startsWith('ERROR|')) {
+      } else if (response.startsWith('ERROR|')) {
         // Extract the error message
         const errorMessage = response.substring(6);
         toast.error(errorMessage);
