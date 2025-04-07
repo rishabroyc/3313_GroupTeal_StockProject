@@ -14,6 +14,16 @@ joe,AAPL,0
 somarza,TSLA,2
 simoo30,GOOGL,2
 simoo30,TSLA,1
-simoo30,AAPL,2
+simoo30,AAPL,3
 sim1,GOOGL,3
 simoo30,AMZN,1
+tester3,MSFT,2
+tester3,AMZN,3
+tester3,TSLA,1
+tester3,GOOGL,1
+tester3,AAPL,1
+tester5,AAPL,3
+tester5,AMZN,4
+tester5,TSLA,3
+tester5,MSFT,1
+tester5,GOOGL,0

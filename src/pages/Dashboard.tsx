@@ -221,23 +221,50 @@ const Dashboard = () => {
     }
   };
 
-  const buildPerformanceData = () => {
-    return portfolioData
-      .filter(holding => holding.quantity > 0)
-      .map(holding => {
-        const buys = recentTransactions.filter(txn => txn.ticker === holding.ticker && txn.type === 'BUY');
-        const totalShares = buys.reduce((sum, txn) => sum + txn.quantity, 0);
-        const totalCost = buys.reduce((sum, txn) => sum + (txn.quantity * txn.price), 0);
-        const avgBuyPrice = totalShares > 0 ? totalCost / totalShares : 0;
-        const market = marketData.find(stock => stock.ticker === holding.ticker);
-        const currentPrice = market?.price || 0;
-        return {
-          ticker: holding.ticker,
-          avgBuyPrice: Math.round(avgBuyPrice * 100) / 100,
-          currentPrice: Math.round(currentPrice * 100) / 100
-        };
-      });
-  };
+// State to store and preserve average buy prices
+const [avgBuyPrices, setAvgBuyPrices] = useState({});
+
+// Update this effect to run whenever recentTransactions changes
+useEffect(() => {
+  if (recentTransactions.length > 0) {
+    // Create a copy of the current state
+    const newAvgPrices = {...avgBuyPrices};
+    
+    // Process new transactions
+    recentTransactions.forEach(txn => {
+      if (txn.type === 'BUY') {
+        // For each ticker, collect all buys
+        const tickerBuys = recentTransactions.filter(t => 
+          t.ticker === txn.ticker && t.type === 'BUY'
+        );
+        
+        const totalShares = tickerBuys.reduce((sum, t) => sum + t.quantity, 0);
+        const totalCost = tickerBuys.reduce((sum, t) => sum + (t.quantity * t.price), 0);
+        
+        // Update the average price for this ticker
+        newAvgPrices[txn.ticker] = totalShares > 0 ? totalCost / totalShares : 0;
+      }
+    });
+    
+    setAvgBuyPrices(newAvgPrices);
+  }
+}, [recentTransactions]);
+
+// Then modify your buildPerformanceData function
+const buildPerformanceData = () => {
+  return portfolioData
+    .filter(holding => holding.quantity > 0)
+    .map(holding => {
+      const market = marketData.find(stock => stock.ticker === holding.ticker);
+      const currentPrice = market?.price || 0;
+      
+      return {
+        ticker: holding.ticker,
+        avgBuyPrice: Math.round((avgBuyPrices[holding.ticker] || 0) * 100) / 100,
+        currentPrice: Math.round(currentPrice * 100) / 100
+      };
+    });
+};
 
 
   if (loading) {
