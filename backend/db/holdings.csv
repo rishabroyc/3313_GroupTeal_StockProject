@@ -1,6 +1,6 @@
 testuser,AAPL,5
-ellaharding@rogers.com,AAPL,0
-ellaharding@rogers.com,MSFT,0
+ellaharding@rogers.com,AAPL,14
+ellaharding@rogers.com,MSFT,12
 ellaharding@rogers.com,TSLA,0
 ella,AAPL,4
 ella,GOOGL,1
@@ -16,3 +16,6 @@ simoo30,GOOGL,2
 simoo30,TSLA,1
 simoo30,AAPL,1
 sim1,GOOGL,3
+ellaharding@rogers.com,GOOGL,19
+ellaharding@rogers.com,AMZN,3
+anja,MSFT,2
