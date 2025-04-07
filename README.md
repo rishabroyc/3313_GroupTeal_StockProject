@@ -30,29 +30,20 @@ Implemented a fully functional C++ backend for the stock trading platform. It sa
 ### How to Compile & Run (after making new changes this starts backend)
 
 1. Compile the server:
-```bash
 g++ -std=c++17 -pthread main.cpp server.cpp handlers/*.cpp utils/*.cpp -o server
 
 2. Run the server:
-```bash
 ./server
+
+3. Run frontend
+npm run dev
 
 ## Market Data Updates:
 The application uses real-time stock data that is stored in `db/market.csv`. To update this data:
 
 1. Make sure you have Python and the required packages installed:
-   ```bash
    pip install requests
 2. Run the market updater script:
-
 cd backend
 python market_updater.py
 
-### What's Next
-- Connect frontend to backend with socket-based trading -- DONE
-
-- Auto-update market.csv using a live stock API -- DONE
-
-- Track and validate user balances
-
-- Add frontend portfolio + transaction syncing
