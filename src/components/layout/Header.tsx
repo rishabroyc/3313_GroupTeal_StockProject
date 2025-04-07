@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Menu, X, User } from "lucide-react";
+import Logout from "../../pages/Logout";
 
 const Header = () => {
   const [scrolled, setScrolled] = useState(false);
@@ -88,6 +89,8 @@ const Header = () => {
               </Link>
             </>
           )}
+          <Logout />
+
         </div>
 
         {/* Mobile Menu Button */}
